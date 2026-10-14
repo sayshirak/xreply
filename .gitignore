@@ -1,0 +1,20 @@
+# Build
+/build/
+/out/
+/cmake-build-*/
+
+# App output / runtime (exe, Qt/CEF deploy, user data)
+/xreply/
+
+# Local settings & logs
+*.user
+*.suo
+*.ncb
+.vs/
+.idea/
+CMakeUserPresets.json
+
+# OS
+Thumbs.db
+Desktop.ini
+.DS_Store
