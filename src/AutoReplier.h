@@ -14,7 +14,7 @@ public:
     // 导出正在关注中的蓝V用户
     QString getExportBlueFollowingScript() const;
 
-    // 在用户主页检测最新帖是否含关键词
+    // 在用户主页检测第一条本人原创帖：须为本地今日发布且含关键词
     QString getScanLatestPostScript(const QStringList& keywords) const;
 
     // 在帖子页回复指定文案

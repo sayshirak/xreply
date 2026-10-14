@@ -151,8 +151,25 @@ QString AutoReplier::getScanLatestPostScript(const QStringList& keywords) const 
         return '';
     }
 
+    function localDateStr(d) {
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return y + '-' + m + '-' + day;
+    }
+
+    function postLocalDate(article) {
+        const t = article.querySelector('time');
+        const iso = t ? (t.getAttribute('datetime') || '') : '';
+        if (!iso) return null;
+        const d = new Date(iso);
+        if (isNaN(d.getTime())) return null;
+        return { iso: iso, localDate: localDateStr(d) };
+    }
+
     function scan() {
         tries++;
+        const today = localDateStr(new Date());
         const articles = document.querySelectorAll('article[data-testid="tweet"]');
         for (const article of articles) {
             if (isRetweet(article)) continue;
@@ -163,6 +180,23 @@ QString AutoReplier::getScanLatestPostScript(const QStringList& keywords) const 
             const href = statusLink ? statusLink.getAttribute('href') : '';
             const postId = href ? (href.split('/status/')[1] || '').split('?')[0] : '';
             if (!postId) continue;
+
+            const when = postLocalDate(article);
+            if (!when) {
+                emit({
+                    op: 'scan', ok: false, handle: handle, postId: postId,
+                    reason: 'no_time', content: '无法读取发布时间'
+                });
+                return;
+            }
+            if (when.localDate !== today) {
+                emit({
+                    op: 'scan', ok: false, handle: handle, postId: postId,
+                    reason: 'not_today', postedAt: when.localDate,
+                    content: '发帖日 ' + when.localDate + '（非今日 ' + today + '）'
+                });
+                return;
+            }
 
             const contentDiv = article.querySelector('[data-testid="tweetText"]');
             const content = contentDiv ? (contentDiv.innerText || '') : '';
@@ -176,14 +210,16 @@ QString AutoReplier::getScanLatestPostScript(const QStringList& keywords) const 
             if (!matched) {
                 emit({
                     op: 'scan', ok: false, handle: handle, postId: postId,
-                    reason: 'no_keyword', content: content.slice(0, 80)
+                    reason: 'no_keyword', postedAt: when.localDate,
+                    content: content.slice(0, 80)
                 });
                 return;
             }
             const postUrl = 'https://x.com' + href.split('?')[0];
             emit({
                 op: 'scan', ok: true, handle: handle, postId: postId,
-                postUrl: postUrl, matched: matched, content: content.slice(0, 120)
+                postUrl: postUrl, matched: matched, postedAt: when.localDate,
+                content: content.slice(0, 120)
             });
             return;
         }

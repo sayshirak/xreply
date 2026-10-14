@@ -587,8 +587,10 @@ void MainWindow::onJsResult(const QString& result) {
         m_currentHandle = handle;
         m_currentPostId = obj.value(QStringLiteral("postId")).toString();
         m_currentPostUrl = obj.value(QStringLiteral("postUrl")).toString();
-        appendLog(QStringLiteral("@%1 命中「%2」，准备回复…")
-                      .arg(handle, obj.value(QStringLiteral("matched")).toString()));
+        appendLog(QStringLiteral("@%1 命中「%2」（%3），准备回复…")
+                      .arg(handle,
+                           obj.value(QStringLiteral("matched")).toString(),
+                           obj.value(QStringLiteral("postedAt")).toString()));
         m_phase = Phase::OpeningPost;
         m_waitingLoad = true;
         m_browser->LoadUrl(m_currentPostUrl);
