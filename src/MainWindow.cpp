@@ -177,6 +177,7 @@ void MainWindow::loadSettings() {
     m_replyEdit->setText(s.value(QStringLiteral("replyText")).toString());
     m_cooldownSpin->setValue(s.value(QStringLiteral("cooldownSec"), 90).toInt());
     m_dailyLimitSpin->setValue(s.value(QStringLiteral("dailyLimit"), 100).toInt());
+    m_lastScannedHandle = s.value(QStringLiteral("lastScannedHandle")).toString().trimmed();
 }
 
 void MainWindow::saveSettings() {
@@ -186,6 +187,7 @@ void MainWindow::saveSettings() {
     s.setValue(QStringLiteral("replyText"), m_replyEdit->text());
     s.setValue(QStringLiteral("cooldownSec"), m_cooldownSpin->value());
     s.setValue(QStringLiteral("dailyLimit"), m_dailyLimitSpin->value());
+    s.setValue(QStringLiteral("lastScannedHandle"), m_lastScannedHandle);
 }
 
 void MainWindow::refreshFollowingStatus() {
@@ -287,7 +289,7 @@ void MainWindow::beginReplyFromCache() {
         m_queue.append(t);
     }
     m_ownHandle = m_followingStore->ownHandle();
-    m_index = 0;
+    applyResumeIndex();
     m_sessionReplied = 0;
     m_exporting = false;
     m_running = true;
@@ -325,7 +327,7 @@ void MainWindow::finishExportAndSave() {
 
     if (thenReply && !m_queue.isEmpty()) {
         m_running = true;
-        m_index = 0;
+        applyResumeIndex();
         m_sessionReplied = 0;
         setControlsForReplying();
         appendLog(QStringLiteral("导出完成，开始互评…"));
@@ -449,10 +451,62 @@ void MainWindow::openNextProfile() {
         m_browser->LoadUrl(QStringLiteral("https://x.com/%1").arg(t.handle));
         return;
     }
+    finishQueueExhausted();
+}
+
+void MainWindow::rememberScannedUser(const QString& handle) {
+    const QString h = handle.trimmed();
+    if (h.isEmpty()) {
+        return;
+    }
+    m_lastScannedHandle = h;
+    QSettings s(QCoreApplication::applicationDirPath() + QStringLiteral("/settings.ini"),
+                QSettings::IniFormat);
+    s.setValue(QStringLiteral("lastScannedHandle"), m_lastScannedHandle);
+}
+
+void MainWindow::applyResumeIndex() {
+    m_index = 0;
+    if (m_lastScannedHandle.isEmpty() || m_queue.isEmpty()) {
+        return;
+    }
+    int found = -1;
+    for (int i = 0; i < m_queue.size(); ++i) {
+        if (m_queue[i].handle.compare(m_lastScannedHandle, Qt::CaseInsensitive) == 0) {
+            found = i;
+            break;
+        }
+    }
+    if (found < 0) {
+        appendLog(QStringLiteral("上次扫描用户 @%1 不在当前蓝V列表，从头开始")
+                      .arg(m_lastScannedHandle));
+        m_index = 0;
+        return;
+    }
+    m_index = found + 1;
+    if (m_index >= m_queue.size()) {
+        appendLog(QStringLiteral("上次已扫到名单末尾（@%1），无可续扫用户")
+                      .arg(m_lastScannedHandle));
+        return;
+    }
+    appendLog(QStringLiteral("从 @%1 的下一位续扫（进度 %2/%3）")
+                  .arg(m_lastScannedHandle)
+                  .arg(m_index)
+                  .arg(m_queue.size()));
+}
+
+void MainWindow::finishQueueExhausted() {
     appendLog(QStringLiteral("队列处理完毕。本次回复 %1，今日累计 %2")
                   .arg(m_sessionReplied)
                   .arg(m_replyStore->todayCount()));
+    // 整轮扫完后清空断点，下次开始互评从头扫，避免一启动就再次「扫描完毕」
+    m_lastScannedHandle.clear();
+    QSettings s(QCoreApplication::applicationDirPath() + QStringLiteral("/settings.ini"),
+                QSettings::IniFormat);
+    s.setValue(QStringLiteral("lastScannedHandle"), QString());
     onPauseClicked();
+    QMessageBox::information(this, QStringLiteral("互评完成"),
+                             QStringLiteral("所有用户已扫描完毕"));
 }
 
 void MainWindow::onBrowserCreated() {
@@ -576,19 +630,21 @@ void MainWindow::onJsResult(const QString& result) {
         }
         const bool ok = obj.value(QStringLiteral("ok")).toBool();
         const QString handle = obj.value(QStringLiteral("handle")).toString();
+        const QString scanned = handle.isEmpty() ? m_currentHandle : handle;
+        rememberScannedUser(scanned);
         if (!ok) {
             appendLog(QStringLiteral("@%1 跳过: %2 %3")
-                          .arg(handle.isEmpty() ? m_currentHandle : handle)
+                          .arg(scanned)
                           .arg(obj.value(QStringLiteral("reason")).toString())
                           .arg(obj.value(QStringLiteral("content")).toString()));
             goNextAfter(1500);
             return;
         }
-        m_currentHandle = handle;
+        m_currentHandle = scanned;
         m_currentPostId = obj.value(QStringLiteral("postId")).toString();
         m_currentPostUrl = obj.value(QStringLiteral("postUrl")).toString();
         appendLog(QStringLiteral("@%1 命中「%2」（%3），准备回复…")
-                      .arg(handle,
+                      .arg(scanned,
                            obj.value(QStringLiteral("matched")).toString(),
                            obj.value(QStringLiteral("postedAt")).toString()));
         m_phase = Phase::OpeningPost;

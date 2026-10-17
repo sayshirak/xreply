@@ -72,6 +72,9 @@ private:
     void goNextAfter(int delayMs);
     void openNextProfile();
     void updateStatusBar();
+    void rememberScannedUser(const QString& handle);
+    void applyResumeIndex();
+    void finishQueueExhausted();
 
     BrowserWidget* m_browser = nullptr;
     AutoReplier* m_replier = nullptr;
@@ -102,6 +105,7 @@ private:
     QString m_ownHandle;
     QVector<ReplyTarget> m_queue;
     int m_index = 0;
+    QString m_lastScannedHandle; // 上次扫描结果对应的用户，续扫从其下一位开始
     QString m_currentHandle;
     QString m_currentPostId;
     QString m_currentPostUrl;
